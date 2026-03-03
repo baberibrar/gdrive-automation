@@ -66,3 +66,14 @@ class FileIdRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     text: str
+
+
+class GenerateFeedbackRequest(BaseModel):
+    text: str
+    analysis: AnalysisResult
+    user_role: str  # "freelancer", "influencer", or "client"
+
+
+class GenerateFeedbackResult(BaseModel):
+    feedback_text: str
+    rating: int = Field(ge=1, le=5)

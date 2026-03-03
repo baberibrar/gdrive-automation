@@ -6,9 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import get_current_user
 from app.models import User
-from app.schemas import AnalysisResult, AnalyzeRequest, ExtractionResult, FileIdRequest
+from app.schemas import (
+    AnalysisResult,
+    AnalyzeRequest,
+    ExtractionResult,
+    FileIdRequest,
+    GenerateFeedbackRequest,
+    GenerateFeedbackResult,
+)
 from app.services.google_drive import download_file, get_file_metadata
-from app.services.openai_service import analyze_parties
+from app.services.openai_service import analyze_parties, generate_feedback
 from app.services.textract import extract_text
 
 GOOGLE_DOCS_MIME_TYPES = {
@@ -91,6 +98,7 @@ async def extract_text_from_file(
         metadata = get_file_metadata(
             access_token=current_user.google_access_token,
             file_id=request.file_id,
+            refresh_token=current_user.google_refresh_token,
         )
     except Exception as e:
         raise HTTPException(
@@ -106,6 +114,7 @@ async def extract_text_from_file(
             access_token=current_user.google_access_token,
             file_id=request.file_id,
             mime_type=mime_type,
+            refresh_token=current_user.google_refresh_token,
         )
     except Exception as e:
         raise HTTPException(
@@ -146,3 +155,32 @@ async def analyze_text(
         )
 
     return AnalysisResult(**result)
+
+
+@router.post("/generate-feedback", response_model=GenerateFeedbackResult)
+async def generate_feedback_from_doc(
+    request: GenerateFeedbackRequest,
+    current_user: User = Depends(get_current_user),
+):
+    if not request.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text cannot be empty",
+        )
+
+    if request.user_role not in ("freelancer", "influencer", "client"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="user_role must be 'freelancer', 'influencer', or 'client'",
+        )
+
+    try:
+        analysis_dict = request.analysis.model_dump()
+        result = generate_feedback(request.text, analysis_dict, request.user_role)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to generate feedback: {str(e)}",
+        )
+
+    return GenerateFeedbackResult(**result)

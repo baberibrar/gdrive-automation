@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
 
+from app.config import settings
 
 GOOGLE_DOCS_MIME_TYPES = {
     "application/vnd.google-apps.document": "text/plain",
@@ -11,16 +12,22 @@ GOOGLE_DOCS_MIME_TYPES = {
 }
 
 
-def _build_drive_service(access_token: str):
-    credentials = Credentials(token=access_token)
+def _build_drive_service(access_token: str, refresh_token: str = None):
+    credentials = Credentials(
+        token=access_token,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+    )
     service = build("drive", "v3", credentials=credentials, cache_discovery=False)
     return service
 
 
 def list_files(
-    access_token: str, folder_id: str = None, query: str = None
+    access_token: str, folder_id: str = None, query: str = None, refresh_token: str = None
 ) -> list[dict]:
-    service = _build_drive_service(access_token)
+    service = _build_drive_service(access_token, refresh_token)
 
     q_parts = []
     if folder_id:
@@ -45,8 +52,8 @@ def list_files(
     return results.get("files", [])
 
 
-def download_file(access_token: str, file_id: str, mime_type: str) -> bytes:
-    service = _build_drive_service(access_token)
+def download_file(access_token: str, file_id: str, mime_type: str, refresh_token: str = None) -> bytes:
+    service = _build_drive_service(access_token, refresh_token)
 
     if mime_type in GOOGLE_DOCS_MIME_TYPES:
         export_mime = GOOGLE_DOCS_MIME_TYPES[mime_type]
@@ -64,8 +71,8 @@ def download_file(access_token: str, file_id: str, mime_type: str) -> bytes:
     return buffer.read()
 
 
-def get_file_metadata(access_token: str, file_id: str) -> dict:
-    service = _build_drive_service(access_token)
+def get_file_metadata(access_token: str, file_id: str, refresh_token: str = None) -> dict:
+    service = _build_drive_service(access_token, refresh_token)
     file_metadata = (
         service.files()
         .get(fileId=file_id, fields="id, name, mimeType, modifiedTime, size, iconLink")

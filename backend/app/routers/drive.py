@@ -22,6 +22,7 @@ async def get_files(
             access_token=current_user.google_access_token,
             folder_id=folder_id,
             query=q,
+            refresh_token=current_user.google_refresh_token,
         )
     except Exception as e:
         import traceback
@@ -53,6 +54,7 @@ async def download_file_endpoint(
         metadata = get_file_metadata(
             access_token=current_user.google_access_token,
             file_id=file_id,
+            refresh_token=current_user.google_refresh_token,
         )
     except Exception as e:
         raise HTTPException(
@@ -68,6 +70,7 @@ async def download_file_endpoint(
             access_token=current_user.google_access_token,
             file_id=file_id,
             mime_type=mime_type,
+            refresh_token=current_user.google_refresh_token,
         )
     except Exception as e:
         raise HTTPException(

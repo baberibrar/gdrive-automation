@@ -1,17 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import client from "../api/client";
 import {
   FileText,
-  Sparkles,
-  MessageSquarePlus,
   Loader2,
   AlertCircle,
-  CheckCircle2,
-  Copy,
-  Check,
   ArrowLeft,
+  User,
+  Briefcase,
 } from "lucide-react";
 
 export default function ExtractionPage() {
@@ -22,80 +19,113 @@ export default function ExtractionPage() {
   const fileName = location.state?.fileName || "Unknown File";
   const mimeType = location.state?.mimeType || "";
 
+  // Processing states
+  const [processing, setProcessing] = useState(true);
+  const [processingStep, setProcessingStep] = useState("extracting"); // extracting | analyzing
+  const [error, setError] = useState(null);
+
+  // Data
   const [extractedText, setExtractedText] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState(null);
-
   const [analysis, setAnalysis] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState(null);
 
-  const [copied, setCopied] = useState(false);
+  // Role selection & feedback generation
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [generatingFeedback, setGeneratingFeedback] = useState(false);
 
-  async function handleExtractText() {
+  const hasStarted = useRef(false);
+
+  // Auto-run extraction + analysis on mount
+  useEffect(() => {
+    if (hasStarted.current) return;
+    hasStarted.current = true;
+    processDocument();
+  }, []);
+
+  async function processDocument() {
     try {
-      setExtracting(true);
-      setExtractError(null);
-      const response = await client.post("/api/extract/text", {
+      setProcessing(true);
+      setError(null);
+
+      // Step 1: Extract text
+      setProcessingStep("extracting");
+      const extractResponse = await client.post("/api/extract/text", {
         file_id: fileId,
         mime_type: mimeType,
       });
-      setExtractedText(response.data.text || response.data.content || "");
-    } catch (err) {
-      console.error("Extraction failed:", err);
-      setExtractError(
-        err.response?.data?.detail || "Failed to extract text from file"
-      );
-    } finally {
-      setExtracting(false);
-    }
-  }
+      const text = extractResponse.data.text || extractResponse.data.content || "";
+      setExtractedText(text);
 
-  async function handleAnalyze() {
-    try {
-      setAnalyzing(true);
-      setAnalyzeError(null);
-      const response = await client.post("/api/extract/analyze", {
+      if (!text.trim()) {
+        setError("No text could be extracted from this file.");
+        setProcessing(false);
+        return;
+      }
+
+      // Step 2: AI Analysis
+      setProcessingStep("analyzing");
+      const analyzeResponse = await client.post("/api/extract/analyze", {
         file_id: fileId,
-        text: extractedText,
+        text: text,
       });
-      setAnalysis(response.data);
+      setAnalysis(analyzeResponse.data);
+      setProcessing(false);
     } catch (err) {
-      console.error("Analysis failed:", err);
-      setAnalyzeError(
-        err.response?.data?.detail || "Failed to analyze text"
+      console.error("Processing failed:", err);
+      setError(
+        err.response?.data?.detail || "Failed to process file. Please try again."
       );
-    } finally {
-      setAnalyzing(false);
+      setProcessing(false);
     }
   }
 
-  function handleCreateFeedback() {
-    const feedbackData = {
-      party_a_name: analysis?.party_a || "",
-      party_b_name: analysis?.party_b || "",
-      role: analysis?.role || "",
-      feedback_text: analysis?.summary || "",
-      source_file: fileName,
-    };
-    navigate("/feedback/new", { state: feedbackData });
-  }
+  async function handleRoleSelect(role) {
+    setSelectedRole(role);
+    setGeneratingFeedback(true);
 
-  async function handleCopyText() {
     try {
-      await navigator.clipboard.writeText(extractedText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-      const textArea = document.createElement("textarea");
-      textArea.value = extractedText;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const response = await client.post("/api/extract/generate-feedback", {
+        text: extractedText,
+        analysis: {
+          party_a_name: analysis.party_a_name || analysis.party_a || "Unknown",
+          party_a_role: analysis.party_a_role || "Unknown",
+          party_b_name: analysis.party_b_name || analysis.party_b || "Unknown",
+          party_b_role: analysis.party_b_role || "Unknown",
+          summary: analysis.summary || analysis.description || "",
+        },
+        user_role: role,
+      });
+
+      // Determine who is giving and receiving feedback based on role
+      let partyA, partyB, feedbackRole;
+      if (role === "client") {
+        // Client giving feedback to freelancer/influencer
+        partyA = analysis.party_a_name || analysis.party_a || "";
+        partyB = analysis.party_b_name || analysis.party_b || "";
+        feedbackRole = "Client";
+      } else {
+        // Freelancer/influencer giving feedback to client
+        partyA = analysis.party_a_name || analysis.party_a || "";
+        partyB = analysis.party_b_name || analysis.party_b || "";
+        feedbackRole = role === "freelancer" ? "Freelancer" : "Influencer";
+      }
+
+      navigate("/feedback/new", {
+        state: {
+          party_a_name: partyA,
+          party_b_name: partyB,
+          role: feedbackRole,
+          feedback_text: response.data.feedback_text,
+          rating: response.data.rating,
+          source_file: fileName,
+        },
+      });
+    } catch (err) {
+      console.error("Feedback generation failed:", err);
+      setError(
+        err.response?.data?.detail || "Failed to generate feedback. Please try again."
+      );
+      setGeneratingFeedback(false);
+      setSelectedRole(null);
     }
   }
 
@@ -103,7 +133,7 @@ export default function ExtractionPage() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back button */}
         <button
           onClick={() => navigate(-1)}
@@ -123,9 +153,6 @@ export default function ExtractionPage() {
               <h1 className="text-xl font-bold text-gray-900 truncate">
                 {fileName}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                File ID: {fileId}
-              </p>
               {mimeType && (
                 <span className="inline-block mt-2 px-2.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
                   {mimeType}
@@ -135,196 +162,129 @@ export default function ExtractionPage() {
           </div>
         </div>
 
-        {/* Step 1: Extract Text */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600 text-sm font-bold">
-                1
-              </div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Extract Text
+        {/* Processing State */}
+        {processing && (
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="flex flex-col items-center text-center">
+              <Loader2 className="h-10 w-10 text-red-600 animate-spin mb-4" />
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                Processing Document
               </h2>
-            </div>
-            {extractedText && (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            )}
-          </div>
-
-          {!extractedText && !extracting && (
-            <button
-              onClick={handleExtractText}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors cursor-pointer"
-            >
-              <FileText className="h-4 w-4" />
-              Extract Text
-            </button>
-          )}
-
-          {extracting && (
-            <div className="flex items-center gap-3 py-4">
-              <Loader2 className="h-5 w-5 text-red-600 animate-spin" />
-              <span className="text-sm text-gray-600">
-                Extracting text from file...
-              </span>
-            </div>
-          )}
-
-          {extractError && (
-            <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg mt-4">
-              <AlertCircle className="h-5 w-5 shrink-0" />
-              <span className="text-sm">{extractError}</span>
-            </div>
-          )}
-
-          {extractedText && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-500">
-                  Extracted Content
-                </span>
-                <button
-                  onClick={handleCopyText}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors cursor-pointer"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-green-500" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto">
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
-                  {extractedText}
-                </pre>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Step 2: AI Analysis */}
-        {extractedText && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600 text-sm font-bold">
-                  2
+              <p className="text-sm text-gray-500">
+                {processingStep === "extracting"
+                  ? "Extracting text from file..."
+                  : "Analyzing document with AI..."}
+              </p>
+              {/* Progress dots */}
+              <div className="flex items-center gap-3 mt-6">
+                <div className={`flex items-center gap-2 text-sm ${
+                  processingStep === "extracting" ? "text-red-600 font-medium" : "text-green-600"
+                }`}>
+                  <div className={`h-2.5 w-2.5 rounded-full ${
+                    processingStep === "extracting" ? "bg-red-600 animate-pulse" : "bg-green-500"
+                  }`} />
+                  Extract
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  AI Analysis
-                </h2>
-              </div>
-              {analysis && (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              )}
-            </div>
-
-            {!analysis && !analyzing && (
-              <button
-                onClick={handleAnalyze}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors cursor-pointer"
-              >
-                <Sparkles className="h-4 w-4" />
-                Analyze with AI
-              </button>
-            )}
-
-            {analyzing && (
-              <div className="flex items-center gap-3 py-4">
-                <Loader2 className="h-5 w-5 text-red-600 animate-spin" />
-                <span className="text-sm text-gray-600">
-                  Analyzing text with AI...
-                </span>
-              </div>
-            )}
-
-            {analyzeError && (
-              <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg mt-4">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                <span className="text-sm">{analyzeError}</span>
-              </div>
-            )}
-
-            {analysis && (
-              <div className="mt-4 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Party A
-                    </p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {analysis.party_a || "Not identified"}
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Party B
-                    </p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {analysis.party_b || "Not identified"}
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Role
-                    </p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {analysis.role || "Not identified"}
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Type
-                    </p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {analysis.type || analysis.document_type || "Not identified"}
-                    </p>
-                  </div>
+                <div className="h-px w-6 bg-gray-300" />
+                <div className={`flex items-center gap-2 text-sm ${
+                  processingStep === "analyzing" ? "text-red-600 font-medium" : "text-gray-400"
+                }`}>
+                  <div className={`h-2.5 w-2.5 rounded-full ${
+                    processingStep === "analyzing" ? "bg-red-600 animate-pulse" : "bg-gray-300"
+                  }`} />
+                  Analyze
                 </div>
-
-                {(analysis.summary || analysis.description) && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                      Summary
-                    </p>
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      {analysis.summary || analysis.description}
-                    </p>
-                  </div>
-                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {/* Step 3: Create Feedback */}
-        {analysis && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600 text-sm font-bold">
-                3
+        {/* Error State */}
+        {error && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <div className="flex items-start gap-3 p-4 bg-red-50 text-red-700 rounded-lg">
+              <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">{error}</p>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    hasStarted.current = false;
+                    processDocument();
+                  }}
+                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline cursor-pointer"
+                >
+                  Try again
+                </button>
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Create Feedback
-              </h2>
             </div>
-            <p className="text-sm text-gray-500 mb-4">
-              Use the extracted information to create a feedback entry.
-            </p>
-            <button
-              onClick={handleCreateFeedback}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors cursor-pointer"
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-              Create Feedback
-            </button>
+          </div>
+        )}
+
+        {/* Role Selection - shown after processing is complete */}
+        {!processing && !error && analysis && !generatingFeedback && (
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="text-center mb-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                What is your role?
+              </h2>
+              <p className="text-sm text-gray-500">
+                Select your role to generate the appropriate feedback
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Freelancer / Influencer */}
+              <button
+                onClick={() => handleRoleSelect("freelancer")}
+                className="group flex flex-col items-center gap-4 p-6 border-2 border-gray-200 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all cursor-pointer"
+              >
+                <div className="bg-red-100 group-hover:bg-red-200 rounded-full p-4 transition-colors">
+                  <Briefcase className="h-8 w-8 text-red-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-lg">
+                    Freelancer / Influencer
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Generate feedback for the client
+                  </p>
+                </div>
+              </button>
+
+              {/* Client */}
+              <button
+                onClick={() => handleRoleSelect("client")}
+                className="group flex flex-col items-center gap-4 p-6 border-2 border-gray-200 rounded-xl hover:border-red-500 hover:bg-red-50 transition-all cursor-pointer"
+              >
+                <div className="bg-red-100 group-hover:bg-red-200 rounded-full p-4 transition-colors">
+                  <User className="h-8 w-8 text-red-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-lg">
+                    Client
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Generate feedback for the freelancer
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Generating Feedback State */}
+        {generatingFeedback && (
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="flex flex-col items-center text-center">
+              <Loader2 className="h-10 w-10 text-red-600 animate-spin mb-4" />
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                Generating Feedback
+              </h2>
+              <p className="text-sm text-gray-500">
+                Creating {selectedRole === "client" ? "feedback for the freelancer" : "feedback for the client"}...
+              </p>
+            </div>
           </div>
         )}
       </main>
