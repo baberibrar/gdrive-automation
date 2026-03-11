@@ -20,6 +20,14 @@ export default function AuthCallback() {
         localStorage.setItem("token", token);
         const success = await fetchUser();
         if (success) {
+          // Check if user has a watched folder, if not redirect to folder picker
+          try {
+            const res = await (await import("../api/client")).default.get("/api/auth/me");
+            if (!res.data.watched_folder_id) {
+              navigate("/select-folder", { replace: true });
+              return;
+            }
+          } catch {}
           navigate("/dashboard", { replace: true });
         } else {
           navigate("/", { replace: true });

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import FileList from "../components/FileList";
 import client from "../api/client";
@@ -9,27 +10,45 @@ import {
   Home,
   RefreshCw,
   X,
+  FolderOpen,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
 
 export default function DriveBrowserPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
+
+  const watchedFolderId = user?.watched_folder_id;
+  const watchedFolderName = user?.watched_folder_name || "Watched Folder";
+
   const [folderStack, setFolderStack] = useState([
-    { id: "root", name: "My Drive" },
+    { id: watchedFolderId || "root", name: watchedFolderName },
   ]);
+
+  // Reset folder stack when watched folder changes
+  useEffect(() => {
+    if (watchedFolderId) {
+      setFolderStack([{ id: watchedFolderId, name: watchedFolderName }]);
+    }
+  }, [watchedFolderId, watchedFolderName]);
 
   const currentFolderId = folderStack[folderStack.length - 1].id;
 
   const fetchFiles = useCallback(async () => {
+    if (!watchedFolderId) return;
     try {
       setLoading(true);
       const params = {};
 
       if (searchQuery) {
         params.query = searchQuery;
+        // Still scope search to watched folder
+        params.folder_id = watchedFolderId;
       } else {
         params.folder_id = currentFolderId;
       }
@@ -42,14 +61,13 @@ export default function DriveBrowserPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentFolderId, searchQuery]);
+  }, [currentFolderId, searchQuery, watchedFolderId]);
 
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
 
   function handleFolderClick(folder) {
-    // Clear search when navigating folders
     setSearchQuery("");
     setSearchInput("");
     setFolderStack((prev) => [...prev, { id: folder.id, name: folder.name }]);
@@ -77,6 +95,34 @@ export default function DriveBrowserPage() {
     setSearchQuery("");
   }
 
+  // If no folder is selected, show a prompt to select one
+  if (!watchedFolderId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col items-center justify-center py-20">
+            <FolderOpen className="h-16 w-16 text-gray-300 mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              No folder selected
+            </h2>
+            <p className="text-gray-500 text-sm mb-6 text-center max-w-md">
+              You need to select a Google Drive folder first. Only files in the
+              selected folder will be accessible.
+            </p>
+            <Link
+              to="/select-folder"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Select a Folder
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
@@ -86,9 +132,12 @@ export default function DriveBrowserPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Google Drive</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              Browse and search your Google Drive files
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <Eye className="h-4 w-4 text-green-500" />
+              <p className="text-gray-500 text-sm">
+                Browsing: <span className="font-medium text-gray-700">{watchedFolderName}</span>
+              </p>
+            </div>
           </div>
 
           <button

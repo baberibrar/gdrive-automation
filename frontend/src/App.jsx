@@ -4,6 +4,7 @@ import DashboardPage from "./pages/DashboardPage";
 import DriveBrowserPage from "./pages/DriveBrowserPage";
 import ExtractionPage from "./pages/ExtractionPage";
 import FeedbackPage from "./pages/FeedbackPage";
+import FolderPickerPage from "./pages/FolderPickerPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthCallback from "./components/AuthCallback";
 
@@ -15,6 +16,14 @@ function App() {
       <Route path="/oauth/callback" element={<AuthCallback />} />
 
       {/* Protected routes */}
+      <Route
+        path="/select-folder"
+        element={
+          <ProtectedRoute>
+            <FolderPickerPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard"
         element={

@@ -13,6 +13,9 @@ import {
   AlertCircle,
   ArrowRight,
   FileText,
+  Eye,
+  Folder,
+  Settings,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -86,6 +89,52 @@ export default function DashboardPage() {
             Manage your Google Drive documents and feedback from one place.
           </p>
         </div>
+
+        {/* Watched Folder Status */}
+        {user?.watched_folder_name ? (
+          <div className="mb-8 p-5 bg-white rounded-xl border border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-lg p-3 bg-green-50 text-green-600">
+                <Eye className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Watching folder</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <Folder className="h-4 w-4 text-yellow-500" />
+                  <span className="font-semibold text-gray-900">
+                    {user.watched_folder_name}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Link
+              to="/select-folder"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              Change
+            </Link>
+          </div>
+        ) : (
+          <Link
+            to="/select-folder"
+            className="mb-8 p-5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4 hover:bg-amber-100 transition-colors"
+          >
+            <div className="rounded-lg p-3 bg-amber-100 text-amber-600">
+              <FolderOpen className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900">
+                No folder selected
+              </p>
+              <p className="text-sm text-amber-700 mt-0.5">
+                Select a Google Drive folder to watch for changes and start
+                working.
+              </p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-amber-400" />
+          </Link>
+        )}
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">

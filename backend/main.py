@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.routers import auth, drive, extraction, feedback
+from app.routers import auth, drive, extraction, feedback, webhook
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(drive.router, prefix="/api")
 app.include_router(extraction.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
+app.include_router(webhook.router, prefix="/api")
 
 
 @app.get("/")

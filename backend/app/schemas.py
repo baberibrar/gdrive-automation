@@ -9,8 +9,22 @@ class UserResponse(BaseModel):
     email: str
     name: str
     picture: Optional[str] = None
+    watched_folder_id: Optional[str] = None
+    watched_folder_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class SelectFolderRequest(BaseModel):
+    folder_id: str
+    folder_name: str
+
+
+class WatchedFolderResponse(BaseModel):
+    folder_id: str
+    folder_name: str
+    channel_id: Optional[str] = None
+    watching: bool = False
 
 
 class FeedbackCreate(BaseModel):

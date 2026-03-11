@@ -16,6 +16,17 @@ class User(Base):
     picture: Mapped[str | None] = mapped_column(String(512), nullable=True)
     google_access_token: Mapped[str] = mapped_column(Text, nullable=False)
     google_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Watched folder
+    watched_folder_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    watched_folder_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Google Drive push notification channel tracking
+    drive_channel_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    drive_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    drive_page_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    channel_expiration: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )

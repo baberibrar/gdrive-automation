@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     OPENAI_API_KEY: str
     FRONTEND_URL: str = "http://localhost:5173"
+    WEBHOOK_BASE_URL: str = "http://localhost:8000"  # Public URL for Google Drive push notifications (use ngrok in dev)
 
     model_config = {
         "env_file": ".env",
